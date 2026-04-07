@@ -1,38 +1,56 @@
 from __future__ import annotations
-import re
-from pathlib import Path
+
 from typing import Any
+
 from fastmcp import FastMCP
 
+from server.pipeline import (
+    build_architecture_prompt,
+    discover_project_directories,
+    parse_project_instance,
+    run_batch_analysis,
+)
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_MARKDOWN_PATH = BASE_DIR / "dataspace" / "systems" / "reference-architecture.md"
 
-
-def _read_markdown_file(markdown_path: str | None) -> tuple[Path, str]:
-    file_path = Path(markdown_path) if markdown_path else DEFAULT_MARKDOWN_PATH
-
-    if not file_path.is_absolute():
-        file_path = BASE_DIR / file_path
-
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except Exception as exc:
-        raise RuntimeError(
-            f"Erro ao carregar o arquivo markdown: {file_path}"
-        ) from exc
-
-    return file_path, content
+def _load_project(project_name: str, project_type: str | None = None):
+    matches = discover_project_directories(project_name=project_name, project_type=project_type)
+    if not matches:
+        raise RuntimeError(f"Project '{project_name}' was not found.")
+    project_dir, resolved_project_type = matches[0]
+    return parse_project_instance(project_dir, resolved_project_type)
 
 
 def register_tools(mcp: FastMCP) -> None:
     @mcp.tool(
-        name="reference_architecture",
-        title="Generating reference architecture",
-        description="Le um arquivo markdown e retorna a referencia do grafico da arquitetura.",
+        name="analyze_architecture_projects",
+        title="Analyze Projects And Generate Architectures",
+        description="Discovers project folders, builds prompts, optionally calls configured LLMs, validates against references, and persists the batch JSON report.",
     )
-    def graph_reference_archic(markdown_path: str | None = None) -> dict[str, Any]:
-        file_path, markdown_content = _read_markdown_file(markdown_path)
+    def analyze_architecture_projects(
+        output_path: str | None = None,
+        include_llm_calls: bool = True,
+        project_name: str | None = None,
+        project_type: str | None = None,
+    ) -> dict[str, Any]:
+        return run_batch_analysis(
+            output_path=output_path,
+            include_llm_calls=include_llm_calls,
+            project_name=project_name,
+            project_type=project_type,
+        )
 
-        response = "image"
-        return response
+    @mcp.tool(
+        name="build_project_architecture_prompt",
+        title="Build Project Architecture Prompt",
+        description="Builds the deterministic JSON-only architecture-generation prompt for a single project instance.",
+    )
+    def build_project_architecture_prompt(
+        project_name: str,
+        project_type: str | None = None,
+    ) -> dict[str, Any]:
+        project = _load_project(project_name=project_name, project_type=project_type)
+        return {
+            "project_name": project.project_name,
+            "project_type": project.project_type,
+            "prompt": build_architecture_prompt(project),
+        }

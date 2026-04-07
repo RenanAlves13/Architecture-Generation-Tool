@@ -1,0 +1,4 @@
+,method,path,file,text
+0,GET,/api/photos,/repo/src/photo-service/app.py,
+1,GET,/api/photos,/repo/src/photo-service/app.py,
+2,,/photo-service,/repo/deploy/photo-service.yaml,workspace: src/photo-service
